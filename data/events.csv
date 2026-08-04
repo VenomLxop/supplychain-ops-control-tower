@@ -1,0 +1,6 @@
+EventID,Event,Severity
+EV001,Port Congestion,High
+EV002,Demand Spike,High
+EV003,Supplier Bankruptcy,Critical
+EV004,Typhoon,Critical
+EV005,Quality Recall,High

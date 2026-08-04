@@ -1,0 +1,11 @@
+SupplierID,Supplier,City,Country,Category,OTD%,Defect%
+SUP001,Supplier 1,Shenzhen,China,PCB,97.71,0.15
+SUP002,Supplier 2,Dongguan,China,Logic,95.6,0.52
+SUP003,Supplier 3,Suzhou,China,Display,98.27,1.39
+SUP004,Supplier 4,Seoul,South Korea,Battery,99.17,0.27
+SUP005,Supplier 5,Osaka,Japan,Camera,96.45,0.16
+SUP006,Supplier 6,Hsinchu,Taiwan,Semiconductor,95.27,1.06
+SUP007,Supplier 7,Penang,Malaysia,Mechanical,94.15,0.48
+SUP008,Supplier 8,Chennai,India,Packaging,97.77,1.14
+SUP009,Supplier 9,Da Nang,Vietnam,Cable,95.28,1.22
+SUP010,Supplier 10,Singapore,Singapore,Logistics,98.69,0.11
