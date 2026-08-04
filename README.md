@@ -23,8 +23,11 @@ optimization_engine.py          # MILP reallocation optimizer vs. naive pro-rata
 dashboard.py                     # Streamlit app tying all three together
 requirements.txt
 ```
+##Screenshots
+##Network Overview
 <img width="1600" height="568" alt="Disruption Scenarios" src="https://github.com/user-attachments/assets/da8e090c-14e9-46a6-b5af-45e9647ffbe1" />
-
+---
+##Disruption Scenario
 <img width="1600" height="766" alt="Network Overview" src="https://github.com/user-attachments/assets/bfab2500-0f88-48b0-b422-14174e4995b2" />
 
 ## Running it
