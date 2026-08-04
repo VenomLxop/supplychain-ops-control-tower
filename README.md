@@ -54,3 +54,9 @@ by pointing it at `dashboard.py`.
    stockout-event penalty (documented assumption) gives the optimizer a genuine reason to
    concentrate an unavoidable shortage on fewer warehouses rather than spread it thin — this
    produces measurable, explainable savings (~2-5% depending on scenario parameters).
+
+   # Global Supply Chain Operations Control Tower
+
+🔗 **[Live Demo](https://supplychain-ops-control-tower-muedllyvhn77kaxcyseffn.streamlit.app/)** · [Data Prep Notes](data/README_data_prep.md)
+
+*Inspired by the operational challenges faced by global consumer electronics manufacturers.*
