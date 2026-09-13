@@ -23,7 +23,7 @@ import numpy as np
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
 import sys
 sys.path.insert(0, '/mnt/user-data/outputs')
-from simulation_engine import load_data, build_params, DATA
+from simulation_engine import load_data, build_params, mean_demand_share, DATA
 
 TRAIN_END = "2025-10-27"   # last 65 days held out for backtesting
 
@@ -100,7 +100,10 @@ def project_inventory_forward(sku, wh, horizon=90):
 
     p = params[(wh, sku)]
     S, LT, R = p["S"], p["LT"], p["R"]
-    share = demand_share.set_index(["SKUID", "WarehouseID"])["DemandShare"].loc[(sku, wh)]
+    # Forecasting projects beyond the historical date range where per-day
+    # regional noise was observed, so use each warehouse's time-mean share
+    # as its representative forward-looking allocation.
+    share = mean_demand_share(demand_share).loc[(sku, wh)]
 
     fc = forecast_sku(sku, horizon)
     fc["WarehouseDemand"] = fc["ForecastQty"] * share

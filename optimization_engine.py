@@ -65,12 +65,16 @@ def optimize_supply_allocation(sku, start_date, duration_days, cut_share):
         index="Date", columns="SKUID", values="Qty", aggfunc="sum").reindex(all_dates).fillna(0)
     total_normal_demand_window = sales_piv.loc[sales_piv.index.intersection(window_dates), sku].sum()
 
-    share_map = demand_share.set_index(["SKUID", "WarehouseID"])["DemandShare"]
+    # Demand share now varies day-to-day per warehouse (regional noise on top
+    # of a fixed base split); use each warehouse's mean share over this
+    # specific disruption window rather than a single static value.
+    window_share = demand_share[(demand_share.SKUID == sku) & (demand_share.Date.isin(window_dates))]
+    share_map = window_share.groupby("WarehouseID")["DemandShare"].mean()
     whs = warehouses["WarehouseID"].tolist()
 
     demand_window, onhand_start, need = {}, {}, {}
     for wh in whs:
-        share = share_map.loc[(sku, wh)]
+        share = share_map.loc[wh]
         demand_window[wh] = total_normal_demand_window * share
         row = inv[(inv.WarehouseID == wh) & (inv.SKUID == sku) & (inv.Date == start)]
         onhand_start[wh] = float(row["OnHand"].iloc[0]) if len(row) else 0.0

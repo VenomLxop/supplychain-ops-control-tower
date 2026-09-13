@@ -26,7 +26,7 @@ def load_data():
     factories = pd.read_csv(f"{DATA}/factories.csv")
     sales = pd.read_csv(f"{DATA}/sales_orders.csv", parse_dates=["Date"])
     shipments = pd.read_csv(f"{DATA}/shipments_enriched.csv", parse_dates=["ShipDate", "ArrivalDate"])
-    demand_share = pd.read_csv(f"{DATA}/warehouse_demand_share.csv")
+    demand_share = pd.read_csv(f"{DATA}/warehouse_demand_share.csv", parse_dates=["Date"])
     prod_orders = pd.read_csv(f"{DATA}/production_orders.csv", parse_dates=["Date"])
     return products, warehouses, factories, sales, shipments, demand_share, prod_orders
 
@@ -38,8 +38,19 @@ def factory_sku_shares(prod_orders):
     return vol.pivot(index="SKUID", columns="FactoryID", values="Share").fillna(0)
 
 
+def mean_demand_share(demand_share):
+    """Collapse the per-day demand_share panel to a single representative
+    (SKUID, WarehouseID) -> share value (its time-mean), for callers that only
+    need a static split rather than the full day-by-day series - e.g. sizing
+    a fixed allocation window rather than running the daily simulation."""
+    return demand_share.groupby(["SKUID", "WarehouseID"])["DemandShare"].mean()
+
+
 def build_params(products, warehouses, sales, shipments, demand_share):
-    """Precompute mu, sigma, lead time, and order-up-to level S per (Warehouse, SKU)."""
+    """Precompute mu, sigma, lead time, and order-up-to level S per (Warehouse, SKU).
+    demand_share now varies day-to-day per warehouse (independent regional noise on
+    top of a fixed base split - see data/build_demand_share.py), so each warehouse's
+    demand series is no longer just a scaled copy of the same national series."""
     all_dates = pd.date_range("2025-01-01", "2025-12-31", freq="D")
     sales_piv = sales.pivot_table(index="Date", columns="SKUID", values="Qty", aggfunc="sum").reindex(all_dates).fillna(0)
 
@@ -47,19 +58,35 @@ def build_params(products, warehouses, sales, shipments, demand_share):
     route_lt = shipments.groupby("Destination")["LeadTimeDays"].mean()
     wh_leadtime = {wh: int(round(route_lt.get(city, 12))) for wh, city in wh_city.items()}
 
-    share_map = demand_share.set_index(["SKUID", "WarehouseID"])["DemandShare"]
+    # TargetZ is a per-warehouse documented assumption (different regional
+    # safety-stock policies) - see data/README_data_prep.md. Default to the
+    # old global constant if the column is somehow missing.
+    DEFAULT_Z = 1.65
+    wh_target_z = dict(zip(warehouses["WarehouseID"], warehouses.get("TargetZ", DEFAULT_Z)))
 
-    R, Z = 7, 1.65
+    # BufferMultiplier is a per-warehouse documented assumption applied to the
+    # WHOLE computed S (not just its Z*sigma safety-margin term) - a warehouse
+    # running a deliberately leaner (or richer) overall stocking policy, not
+    # just a different safety margin. See data/README_data_prep.md. Defaults
+    # to 1.0 (no change) if the column is missing.
+    DEFAULT_BUFFER_MULT = 1.0
+    wh_buffer_mult = dict(zip(warehouses["WarehouseID"], warehouses.get("BufferMultiplier", DEFAULT_BUFFER_MULT)))
+
+    share_piv = demand_share.pivot_table(index="Date", columns=["SKUID", "WarehouseID"], values="DemandShare").reindex(all_dates)
+
+    R = 7
     params = {}
     for sku in products["SKUID"]:
         d_total = sales_piv[sku].values
         for wh in warehouses["WarehouseID"]:
-            share = share_map.loc[(sku, wh)]
+            share = share_piv[(sku, wh)].values
             d = d_total * share
             mu, sigma = d.mean(), d.std()
             LT = wh_leadtime[wh]
-            S = mu * (R + LT) + Z * sigma * np.sqrt(R + LT)
-            params[(wh, sku)] = dict(demand=d, mu=mu, sigma=sigma, LT=LT, S=S, R=R)
+            Z = wh_target_z.get(wh, DEFAULT_Z)
+            buffer_mult = wh_buffer_mult.get(wh, DEFAULT_BUFFER_MULT)
+            S = (mu * (R + LT) + Z * sigma * np.sqrt(R + LT)) * buffer_mult
+            params[(wh, sku)] = dict(demand=d, mu=mu, sigma=sigma, LT=LT, S=S, R=R, Z=Z)
     return params, all_dates
 
 
