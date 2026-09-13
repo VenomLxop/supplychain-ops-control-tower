@@ -61,3 +61,12 @@ by pointing it at `dashboard.py`.
    stockout-event penalty (documented assumption) gives the optimizer a genuine reason to
    concentrate an unavoidable shortage on fewer warehouses rather than spread it thin — this
    produces measurable, explainable savings (~2-5% depending on scenario parameters).
+5. **Predicted stockout days cluster on nearly identical calendar dates across ALL warehouses**
+   under a demand spike, even though warehouse demand volumes range from ~5 to ~82 units/day
+   (verified: simulating SKU105 across all 8 warehouses with no shock, every warehouse hits
+   OnHand==0 within a day of each other). Root cause: each warehouse's demand is a fixed
+   proportional share of one national demand series, and its safety-stock buffer scales
+   proportionally too, so every warehouse ends up with roughly the same *days of coverage* —
+   a spike in the shared national series pushes them all toward zero around the same days.
+   This is a genuine modeling limitation, not a code bug: real warehouses would have their own
+   idiosyncratic regional demand noise rather than just a scaled share of one national series.

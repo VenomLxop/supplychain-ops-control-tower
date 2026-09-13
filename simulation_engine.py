@@ -234,12 +234,12 @@ if __name__ == "__main__":
           f"{((comp_summary['BaselineStockoutRate']==0)&(comp_summary['ShockedStockoutRate']>0)).sum()}/{len(comp_summary)}")
     print(comp_summary.sort_values("DeltaStockoutRate", ascending=False).head(10).to_string(index=False))
 
-    print("\n=== DEMAND SPIKE: SKU105 +30%, 14 days, India (WH006) only ===")
-    spike_summary = run_demand_spike_scenario("SKU105", 0.30, "2025-04-01", 14, warehouse_ids=["WH006"])
+    print("\n=== DEMAND SPIKE: SKU105 +100%, 30 days, India (WH006) only ===")
+    spike_summary = run_demand_spike_scenario("SKU105", 1.00, "2025-04-01", 30, warehouse_ids=["WH006"])
     print(spike_summary.to_string(index=False))
 
-    print("\n=== DEMAND SPIKE: SKU105 +30%, 14 days, ALL warehouses ===")
-    spike_all = run_demand_spike_scenario("SKU105", 0.30, "2025-04-01", 14)
+    print("\n=== DEMAND SPIKE: SKU105 +100%, 30 days, ALL warehouses ===")
+    spike_all = run_demand_spike_scenario("SKU105", 1.00, "2025-04-01", 30)
     print(f"avg baseline stockout={spike_all['BaselineStockoutRate'].mean():.4f}  "
           f"avg shocked stockout={spike_all['ShockedStockoutRate'].mean():.4f}")
     print(spike_all.sort_values("DeltaStockoutRate", ascending=False).head(8).to_string(index=False))

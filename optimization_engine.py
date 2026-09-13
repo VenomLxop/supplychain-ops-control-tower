@@ -25,8 +25,6 @@ transfer" model.
 import pandas as pd
 import numpy as np
 import pulp
-import sys
-sys.path.insert(0, '/mnt/user-data/outputs')
 from simulation_engine import load_data, DATA
 
 
