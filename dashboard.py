@@ -12,7 +12,7 @@ import pandas as pd
 import numpy as np
 import plotly.graph_objects as go
 import pydeck as pdk
-import sys, os
+import sys, os, time
 
 sys.path.insert(0, os.path.dirname(__file__))
 from simulation_engine import load_data, build_params, simulate, factory_sku_shares
@@ -94,6 +94,42 @@ params, all_dates = get_params()
 fac_shares = get_fac_shares()
 inv_daily = get_inventory_daily()
 N_FACTORIES = len(factories)
+N_WAREHOUSES = len(warehouses)
+
+# Friendly "Category — Product (SKUID)" labels for every SKU dropdown, e.g.
+# "Laptop — PX-100 (SKU100)" - built from products.csv's real Category/Product
+# columns, not invented names. format_func keeps the underlying value passed
+# to every backend call as the plain SKUID.
+SKU_LABELS = dict(zip(
+    products["SKUID"],
+    products["Category"] + " — " + products["Product"] + " (" + products["SKUID"] + ")",
+))
+
+
+def sku_label(skuid):
+    return SKU_LABELS.get(skuid, skuid)
+
+
+@st.cache_data
+def compute_network_stockout_risk(horizon):
+    """Runs project_inventory_forward() for every (SKU, Warehouse) combination
+    and returns the ones predicted to hit a stockout within `horizon` days,
+    ranked worst first. Slow (~240 combos) - cached and meant to be triggered
+    on demand, not on every page load."""
+    wh_city = dict(zip(warehouses["WarehouseID"], warehouses["Warehouse"]))
+    rows = []
+    for sku in products["SKUID"]:
+        for wh in warehouses["WarehouseID"]:
+            proj = project_inventory_forward(sku, wh, horizon)
+            stockout_days = proj[proj.PredictedStockout]
+            if len(stockout_days):
+                rows.append(dict(
+                    SKUID=sku, Product=sku_label(sku),
+                    WarehouseID=wh, City=wh_city[wh],
+                    FirstStockoutDate=stockout_days.iloc[0]["Date"].date(),
+                    StockoutDays=len(stockout_days),
+                ))
+    return pd.DataFrame(rows)
 
 st.title("🌐 Global Supply Chain Operations Control Tower")
 st.caption("Inspired by the operational challenges faced by global consumer electronics manufacturers.")
@@ -109,14 +145,17 @@ st.markdown(
     "genuinely at risk."
 )
 
-tab_overview, tab_scenario, tab_forecast = st.tabs(["📍 Network Overview", "⚠️ Disruption Scenarios", "📈 Forecast & Reallocation"])
+tab_overview, tab_scenario, tab_forecast, tab_alerts = st.tabs(
+    ["📍 Network Overview", "⚠️ Disruption Scenarios", "📈 Forecast & Reallocation", "🚨 Network Alerts"]
+)
 
 # ============================================================= OVERVIEW TAB
 with tab_overview:
     st.caption("A live health check of every warehouse in the network — green means healthy, red means at risk of running out of stock.")
 
     with st.container(border=True):
-        sku_for_map = st.selectbox("Show network health for SKU:", products["SKUID"].tolist(), key="overview_sku")
+        sku_for_map = st.selectbox("Show network health for SKU:", products["SKUID"].tolist(),
+                                    format_func=sku_label, key="overview_sku")
 
     wh_status = []
     for wh in warehouses["WarehouseID"]:
@@ -135,7 +174,9 @@ with tab_overview:
                               lat=lat, lon=lon, Capacity=row["Capacity"]))
     fac_df = pd.DataFrame(fac_rows)
 
-    col_map, col_kpi = st.columns([2, 1])
+    MAP_HEIGHT = 330  # ~65% of the previous default (~500px), so map+KPIs+table fit one screen
+
+    col_map, col_kpi, col_table = st.columns([2, 1, 1.2])
 
     with col_map:
         wh_layer = pdk.Layer(
@@ -146,16 +187,18 @@ with tab_overview:
             "ScatterplotLayer", data=fac_df, get_position="[lon, lat]",
             get_fill_color=[70, 130, 180], get_radius=120000, pickable=True,
         )
-        view_state = pdk.ViewState(latitude=15, longitude=40, zoom=1.1)
+        # Zoomed out slightly further than before (was 1.1) to compensate for the
+        # narrower map column now that Warehouse detail sits alongside it - otherwise
+        # the westernmost point (Chicago/WH004) gets clipped off the visible map.
+        view_state = pdk.ViewState(latitude=15, longitude=40, zoom=0.7)
         st.pydeck_chart(pdk.Deck(
             layers=[wh_layer, fac_layer], initial_view_state=view_state,
             map_style=None,
             tooltip={"text": "{City}\nStockout rate: {StockoutRate}"},
-        ))
+        ), height=MAP_HEIGHT)
         st.caption(
-            "🔵 Factories (where products are made)   🟢 Healthy warehouse (<2% stockout)   "
-            "🟡 Watch (2-5%)   🔴 At risk (>5%) — a warehouse's **stockout rate** is simply "
-            "the share of days it has zero units of this product on the shelf."
+            "🔵 Factories (where products are made)   🟢 Healthy (<2%)   🟡 Watch (2-5%)   🔴 At risk (>5%) — "
+            "**stockout rate** = the share of days a warehouse has zero units of this product on the shelf."
         )
         wh004_rate = wh_df.set_index("WarehouseID").loc["WH004", "StockoutRate"] if "WH004" in wh_df["WarehouseID"].values else 0
         if wh004_rate > 0.05:
@@ -182,8 +225,11 @@ with tab_overview:
             "SKUs tracked", len(products),
             help="Number of distinct products (SKUs - Stock Keeping Units, i.e. individual product codes) tracked in this simulation.",
         )
+
+    with col_table:
+        st.subheader("Warehouse detail")
         st.dataframe(wh_df[["WarehouseID", "City", "StockoutRate"]].style.format({"StockoutRate": "{:.2%}"}),
-                     hide_index=True, width='stretch')
+                     hide_index=True, width='stretch', height=MAP_HEIGHT + 45)
 
 # ============================================================= SCENARIO TAB
 with tab_scenario:
@@ -211,7 +257,7 @@ with tab_scenario:
                        "Compare cutting every warehouse's supply by the same amount (the naive default) "
                        "against an optimizer that reallocates the limited supply more intelligently.")
             with col1:
-                sku_choice = st.selectbox("SKU affected", products["SKUID"].tolist())
+                sku_choice = st.selectbox("SKU affected", products["SKUID"].tolist(), format_func=sku_label)
             with col2:
                 start_date = st.date_input("Start date", pd.Timestamp("2025-06-01"), key="supp_start")
             with col3:
@@ -226,7 +272,7 @@ with tab_scenario:
             st.caption("Demand for a product suddenly jumps - e.g. a viral trend or a regional surge. "
                        "See how long it takes warehouses to run dry before the network catches up.")
             with col1:
-                sku_choice = st.selectbox("SKU", products["SKUID"].tolist(), key="spike_sku")
+                sku_choice = st.selectbox("SKU", products["SKUID"].tolist(), format_func=sku_label, key="spike_sku")
             with col2:
                 wh_choice = st.multiselect("Warehouse(s) affected (blank = all)", warehouses["WarehouseID"].tolist())
             with col3:
@@ -363,7 +409,7 @@ with tab_forecast:
                "against the naive default.")
     with st.container(border=True):
         col1, col2, col3 = st.columns(3)
-        sku_f = col1.selectbox("SKU", products["SKUID"].tolist(), key="fc_sku")
+        sku_f = col1.selectbox("SKU", products["SKUID"].tolist(), format_func=sku_label, key="fc_sku")
         wh_f = col2.selectbox("Warehouse", warehouses["WarehouseID"].tolist(), key="fc_wh")
         horizon = col3.slider(
             "Forecast horizon (days)", 30, 180, 90,
@@ -427,3 +473,52 @@ with tab_forecast:
         else:
             st.success(f"✅ **What this means:** {sku_f} at {wh_f} is not predicted to run out of stock "
                        f"in the next {horizon} days under normal conditions.")
+
+# ============================================================= ALERTS TAB
+with tab_alerts:
+    n_combos = len(products) * N_WAREHOUSES
+    st.caption(
+        "Checking one product/warehouse pair at a time on the Forecast tab doesn't tell you which "
+        f"combinations, out of all {n_combos}, actually need attention. This scans every one of them "
+        "and ranks the ones heading toward a stockout soonest or hardest."
+    )
+    horizon_alert = st.slider(
+        "Forecast horizon (days)", 30, 180, 90, key="alert_horizon",
+        help="How many days ahead to check every product/warehouse pair for a predicted stockout.",
+    )
+    st.caption(f"This checks all {len(products)} products × {N_WAREHOUSES} warehouses = {n_combos} combinations, "
+               "so it takes a couple of minutes to run - it's cached, so you only pay that cost once per horizon.")
+    run_scan = st.button("🔍 Check network-wide stockout risk", type="primary")
+
+    if run_scan:
+        with st.spinner(f"Scanning all {n_combos} product/warehouse combinations... this can take a minute or two."):
+            start_t = time.time()
+            risk_df = compute_network_stockout_risk(horizon_alert)
+            elapsed = time.time() - start_t
+        st.session_state["alert_result"] = risk_df
+        st.session_state["alert_elapsed"] = elapsed
+        st.session_state["alert_horizon_used"] = horizon_alert
+
+    if "alert_result" in st.session_state:
+        risk_df = st.session_state["alert_result"]
+        elapsed = st.session_state["alert_elapsed"]
+        h = st.session_state["alert_horizon_used"]
+        with st.container(border=True):
+            if len(risk_df) == 0:
+                st.success(f"No predicted stockouts across any of the {n_combos} product/warehouse combinations "
+                           f"in the next {h} days.")
+            else:
+                ranked = risk_df.sort_values(["StockoutDays", "FirstStockoutDate"], ascending=[False, True])
+                worst_wh = ranked.iloc[0]["WarehouseID"]
+                st.markdown(
+                    f"**What this means:** out of {n_combos} product/warehouse combinations, "
+                    f"**{len(risk_df)}** are predicted to run out of stock at least once in the next {h} days. "
+                    f"Ranked below, worst first (most stockout days, then soonest). **{worst_wh}** shows up "
+                    "repeatedly near the top - see the Network Overview tab for why."
+                )
+                st.dataframe(
+                    ranked[["Product", "WarehouseID", "City", "FirstStockoutDate", "StockoutDays"]],
+                    hide_index=True, width='stretch',
+                )
+            st.caption(f"Computed in {elapsed:.1f}s across {n_combos} combinations for a {h}-day horizon. "
+                       "Cached until you pick a different horizon.")
