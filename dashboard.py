@@ -237,7 +237,12 @@ with tab_forecast:
         fc = forecast_sku(sku_f, horizon)
         proj = project_inventory_forward(sku_f, wh_f, horizon)
 
+    hist = sales[sales.SKUID == sku_f].set_index("Date")["Qty"].sort_index()
+    hist_window = hist[hist.index >= fc.Date.min() - pd.Timedelta(days=90)]
+
     fig1 = go.Figure()
+    fig1.add_trace(go.Scatter(x=hist_window.index, y=hist_window.values, name="Actual (last 90d)",
+                               line=dict(color="#7f7f7f", width=1), opacity=0.5))
     fig1.add_trace(go.Scatter(x=fc.Date, y=fc.ForecastQty, name="Forecast", line=dict(color="#1f77b4")))
     fig1.add_trace(go.Scatter(x=fc.Date, y=fc.Upper80, name="80% upper", line=dict(width=0), showlegend=False))
     fig1.add_trace(go.Scatter(x=fc.Date, y=fc.Lower80, name="80% interval", fill="tonexty",

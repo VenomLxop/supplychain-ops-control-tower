@@ -1,9 +1,9 @@
-WarehouseID,Warehouse
-WH001,Singapore
-WH002,Dubai
-WH003,Rotterdam
-WH004,Chicago
-WH005,Sydney
-WH006,Mumbai
-WH007,Sao Paulo
-WH008,Johannesburg
+WarehouseID,Warehouse,TargetZ,BufferMultiplier
+WH001,Singapore,1.87,1.0
+WH002,Dubai,1.6,1.0
+WH003,Rotterdam,1.47,1.0
+WH004,Chicago,1.0,0.25
+WH005,Sydney,1.2,1.0
+WH006,Mumbai,2.0,1.0
+WH007,Sao Paulo,1.33,1.0
+WH008,Johannesburg,1.73,1.0
