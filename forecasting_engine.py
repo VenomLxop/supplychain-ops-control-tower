@@ -21,8 +21,6 @@ Provides:
 import pandas as pd
 import numpy as np
 from statsmodels.tsa.holtwinters import ExponentialSmoothing
-import sys
-sys.path.insert(0, '/mnt/user-data/outputs')
 from simulation_engine import load_data, build_params, DATA
 
 TRAIN_END = "2025-10-27"   # last 65 days held out for backtesting

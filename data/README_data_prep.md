@@ -35,6 +35,16 @@ by location.
 - **This is a modeling assumption, not observed data** — flag this explicitly if asked in
   an interview: "I allocated national demand to warehouses using a documented synthetic
   share, since the source data didn't include regional demand splits."
+- **Consequence I caught during stress-testing**: because every warehouse's demand is a fixed
+  proportional share of one national series, and its safety-stock buffer scales proportionally
+  too, every warehouse ends up with roughly the same *days of coverage* regardless of its actual
+  volume. I verified this by simulating SKU105 across all 8 warehouses with no shock (mu ranging
+  ~5 to ~82 units/day) and comparing OnHand==0 dates — all 8 warehouses stocked out within a day
+  of each other. So a spike in the shared national series pushes every warehouse toward zero
+  around the same calendar dates, which reads as an unrealistic, perfectly synchronized network
+  outage. This is a genuine limitation of the Dirichlet-share approach, not a code bug — real
+  warehouses would carry their own idiosyncratic regional demand noise rather than just a scaled
+  share of one national series.
 
 ### 4. `inventory_daily.csv` — full daily inventory panel (365 days × 8 warehouses × 30 SKUs = 87,600 rows)
 Original Inventory sheet had only 2,920 sparse snapshot rows — nowhere near enough for a
